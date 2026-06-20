@@ -14,8 +14,9 @@ class AdminDashboardScreen extends StatefulWidget {
 class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
   bool _isAdmin = false;
   bool _loading = true;
-  int _bookings = 0;
-  int _users = 0;
+  int _totalAdmins = 0;
+  int _totalTourists = 0;
+  int _totalGuides = 0;
   int _places = 0;
   List<Map<String, dynamic>> _pendingSuggestions = [];
   List<Map<String, dynamic>> _pendingTourGuides = [];
@@ -51,9 +52,24 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
         return;
       }
 
-      final bookings = await supabase.from('bookings').select('id');
-      final users = await supabase.from('profiles').select('id');
+      // Count admins
+      final admins = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('role', 'admin');
+      // Count tourists (role = 'user')
+      final tourists = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('role', 'user');
+      // Count guides (role = 'tour_guide')
+      final guides = await supabase
+          .from('profiles')
+          .select('id')
+          .eq('role', 'tour_guide');
+
       final places = await supabase.from('places').select('id');
+
       final suggestions = await supabase
           .from('place_suggestions')
           .select('*, profiles(full_name)')
@@ -69,8 +85,9 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
 
       setState(() {
         _isAdmin = true;
-        _bookings = (bookings as List).length;
-        _users = (users as List).length;
+        _totalAdmins = (admins as List).length;
+        _totalTourists = (tourists as List).length;
+        _totalGuides = (guides as List).length;
         _places = (places as List).length;
         _pendingSuggestions = List<Map<String, dynamic>>.from(suggestions);
         _pendingTourGuides = List<Map<String, dynamic>>.from(pendingGuides);
@@ -155,18 +172,20 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             const Text('System Overview', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87)),
             const SizedBox(height: 12),
 
-            // Metrics Grid
+            // Metrics Grid: Total Admins, Tourists, Guides, Places
             Row(
               children: [
-                _statCard('Total Bookings', _bookings, Icons.assignment, const Color(0xFF1E3A8A)),
+                _statCard('Admins', _totalAdmins, Icons.admin_panel_settings, const Color(0xFF1E3A8A)),
                 const SizedBox(width: 12),
-                _statCard('Total Users', _users, Icons.people_alt, MyApp.secondaryColor),
+                _statCard('Tourists', _totalTourists, Icons.people, MyApp.secondaryColor),
               ],
             ),
             const SizedBox(height: 12),
             Row(
               children: [
-                _statCard('Total Places', _places, Icons.map, MyApp.primaryColor),
+                _statCard('Guides', _totalGuides, Icons.person_pin, Colors.green.shade700),
+                const SizedBox(width: 12),
+                _statCard('Places', _places, Icons.map, MyApp.primaryColor),
               ],
             ),
             const SizedBox(height: 28),
@@ -233,7 +252,7 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
             const SizedBox(height: 24),
 
             // ============================================================
-            // Pending Tour Guide Approvals — Languages removed
+            // Pending Tour Guide Approvals
             // ============================================================
             _sectionHeader('Pending Tour Guide Approvals', _pendingTourGuides.length),
             const SizedBox(height: 10),
@@ -272,7 +291,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text('${g['guide_division'] ?? 'Global'} Division'),
-                          // Language line removed
                           Text(
                             '৳${g['price_per_day']}/day',
                             style: const TextStyle(fontWeight: FontWeight.bold),
@@ -301,90 +319,6 @@ class _AdminDashboardScreenState extends State<AdminDashboardScreen> {
               ),
 
             const SizedBox(height: 24),
-
-            // Recent System Bookings
-            const Text('Recent System Bookings', style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: Colors.black87)),
-            const SizedBox(height: 10),
-            FutureBuilder<List<Map<String, dynamic>>>(
-              future: supabase
-                  .from('bookings')
-                  .select()
-                  .order('created_at', ascending: false)
-                  .limit(25),
-              builder: (context, snapshot) {
-                if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Padding(
-                    padding: EdgeInsets.all(24),
-                    child: Center(child: CircularProgressIndicator()),
-                  );
-                }
-                final list = snapshot.data ?? [];
-                if (list.isEmpty) return _emptyState('No bookings found in system.');
-
-                return Card(
-                  elevation: 0,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    side: BorderSide(color: Colors.grey[200]!),
-                  ),
-                  child: ListView.separated(
-                    shrinkWrap: true,
-                    physics: const NeverScrollableScrollPhysics(),
-                    itemCount: list.length,
-                    separatorBuilder: (context, index) => Divider(color: Colors.grey[100], height: 1),
-                    itemBuilder: (context, i) {
-                      final b = list[i];
-                      final isPending = b['status'] == 'pending';
-                      return ListTile(
-                        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
-                        leading: CircleAvatar(
-                          backgroundColor: isPending ? Colors.amber[50] : Colors.green[50],
-                          child: Icon(Icons.receipt_long, color: isPending ? Colors.amber[800] : Colors.green[800], size: 20),
-                        ),
-                        title: Text(
-                          '${b['booking_type']} (#${b['id']})',
-                          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
-                        ),
-                        subtitle: Text(
-                          '৳${b['total_price']} • ${b['created_at'].toString().substring(0, 10)}',
-                          style: TextStyle(color: Colors.grey[600], fontSize: 12),
-                        ),
-                        trailing: isPending
-                            ? ElevatedButton(
-                          style: ElevatedButton.styleFrom(
-                            backgroundColor: MyApp.secondaryColor,
-                            foregroundColor: Colors.white,
-                            elevation: 0,
-                            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 0),
-                            fixedSize: const Size(80, 32),
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(6)),
-                          ),
-                          onPressed: () async {
-                            await supabase
-                                .from('bookings')
-                                .update({'status': 'confirmed'})
-                                .eq('id', b['id']);
-                            setState(() {});
-                          },
-                          child: const Text('Confirm', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold)),
-                        )
-                            : Container(
-                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                          decoration: BoxDecoration(
-                            color: Colors.grey[100],
-                            borderRadius: BorderRadius.circular(4),
-                          ),
-                          child: Text(
-                            (b['status'] as String).toUpperCase(),
-                            style: TextStyle(color: Colors.grey[700], fontSize: 10, fontWeight: FontWeight.bold),
-                          ),
-                        ),
-                      );
-                    },
-                  ),
-                );
-              },
-            ),
           ],
         ),
       ),

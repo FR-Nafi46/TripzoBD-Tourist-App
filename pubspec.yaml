@@ -12,12 +12,24 @@ dependencies:
 
   url_launcher: ^6.2.1
   file_picker: ^8.1.4
-  image_picker: ^1.0.5          # ✅ Added for profile photo
+  image_picker: ^1.0.5
   mime: ^1.0.5
   cupertino_icons: ^1.0.8
   supabase_flutter: ^2.14.2
-
   collection: ^1.18.0
+  http: ^1.2.0
+
+  # Google Maps & Location
+  google_maps_flutter: ^2.5.0
+  geolocator: ^10.1.0
+  permission_handler: ^11.0.0
+  geocoding: ^3.0.0
+  flutter_launcher_icons: "^0.14.4"
+
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "assets/icon/iconTBD.png"
 
 dev_dependencies:
   flutter_test:

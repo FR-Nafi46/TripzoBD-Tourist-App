@@ -1,8 +1,10 @@
 import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 import 'main.dart';
+import 'location_picker_screen.dart';
 
 class AddPlaceSuggestionScreen extends StatefulWidget {
   final String division;
@@ -22,15 +24,15 @@ class _AddPlaceSuggestionScreenState extends State<AddPlaceSuggestionScreen> {
   final _bestTimeController = TextEditingController();
   final _entryFeeController = TextEditingController();
   final _openingHoursController = TextEditingController();
-  final _latController = TextEditingController();
-  final _lngController = TextEditingController();
+
+  LatLng? _selectedLocation;
+  String? _selectedAddress;
 
   List<Uint8List> _imageBytesList = [];
   List<String> _imageFileNames = [];
   int _coverIndex = 0;
   bool _loading = false;
 
-  // App Palette Mapped Locally
   static const Color darkTeal = Color(0xFF0B2B26);
   static const Color softSage = Color(0xFF8EB69B);
   static const Color bgLilac = Color(0xFFF2F0FA);
@@ -44,9 +46,29 @@ class _AddPlaceSuggestionScreenState extends State<AddPlaceSuggestionScreen> {
     _bestTimeController.dispose();
     _entryFeeController.dispose();
     _openingHoursController.dispose();
-    _latController.dispose();
-    _lngController.dispose();
     super.dispose();
+  }
+
+  Future<void> _pickLocationFromMap() async {
+    final result = await Navigator.push<LocationResult>(
+      context,
+      MaterialPageRoute(
+        builder: (_) => LocationPickerScreen(
+          initialLocation: _selectedLocation,
+        ),
+      ),
+    );
+    if (result != null) {
+      setState(() {
+        _selectedLocation = result.location;
+        _selectedAddress = result.address;
+
+        // If the name field is empty, suggest the address as the name
+        if (_nameController.text.isEmpty && result.address != null) {
+          _nameController.text = result.address!;
+        }
+      });
+    }
   }
 
   Future<void> _pickImages() async {
@@ -135,8 +157,8 @@ class _AddPlaceSuggestionScreenState extends State<AddPlaceSuggestionScreen> {
         'best_time_to_visit': _bestTimeController.text.trim().isEmpty ? null : _bestTimeController.text.trim(),
         'entry_fee': _entryFeeController.text.trim().isEmpty ? null : _entryFeeController.text.trim(),
         'opening_hours': _openingHoursController.text.trim().isEmpty ? null : _openingHoursController.text.trim(),
-        'latitude': _latController.text.trim().isEmpty ? null : double.tryParse(_latController.text.trim()),
-        'longitude': _lngController.text.trim().isEmpty ? null : double.tryParse(_lngController.text.trim()),
+        'latitude': _selectedLocation?.latitude,
+        'longitude': _selectedLocation?.longitude,
         'images': imageUrls,
         'cover_image': coverImageUrl,
         'suggested_by': user.id,
@@ -199,6 +221,78 @@ class _AddPlaceSuggestionScreenState extends State<AddPlaceSuggestionScreen> {
     );
   }
 
+  Widget _buildLocationPicker() {
+    final bool hasLocation = _selectedLocation != null;
+
+    return GestureDetector(
+      onTap: _pickLocationFromMap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        width: double.infinity,
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: hasLocation ? softSage : Colors.grey.shade300,
+            width: hasLocation ? 1.5 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(
+                color: hasLocation ? darkTeal : Colors.grey.shade100,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(
+                hasLocation ? Icons.location_on_rounded : Icons.add_location_alt_rounded,
+                color: hasLocation ? Colors.white : Colors.grey.shade500,
+                size: 22,
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    hasLocation ? 'Location Selected' : 'Pin on Map (Optional)',
+                    style: TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w600,
+                      color: hasLocation ? darkTeal : Colors.grey.shade600,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    hasLocation
+                        ? (_selectedAddress ?? 'Lat: ${_selectedLocation!.latitude.toStringAsFixed(4)}, Lng: ${_selectedLocation!.longitude.toStringAsFixed(4)}')
+                        : 'Tap to open map and drop a pin',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: hasLocation ? softSage : Colors.grey.shade400,
+                      fontWeight: hasLocation ? FontWeight.w500 : FontWeight.normal,
+                    ),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+            Icon(
+              hasLocation ? Icons.edit_location_alt_rounded : Icons.chevron_right_rounded,
+              color: hasLocation ? softSage : Colors.grey.shade400,
+              size: 22,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -213,7 +307,7 @@ class _AddPlaceSuggestionScreenState extends State<AddPlaceSuggestionScreen> {
         iconTheme: const IconThemeData(color: Colors.white),
       ),
       body: GestureDetector(
-        onTap: () => FocusScope.of(context).unfocus(), // Dismiss keyboard on background tap
+        onTap: () => FocusScope.of(context).unfocus(),
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(20),
           child: Form(
@@ -221,7 +315,6 @@ class _AddPlaceSuggestionScreenState extends State<AddPlaceSuggestionScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                // Top Meta Information Banner
                 Container(
                   width: double.infinity,
                   padding: const EdgeInsets.all(16),
@@ -252,7 +345,6 @@ class _AddPlaceSuggestionScreenState extends State<AddPlaceSuggestionScreen> {
                 ),
                 const SizedBox(height: 24),
 
-                // Core details inputs
                 TextFormField(
                   controller: _nameController,
                   decoration: _buildInputDecoration(label: 'Place Name *', prefixIcon: Icons.location_city_rounded),
@@ -270,6 +362,9 @@ class _AddPlaceSuggestionScreenState extends State<AddPlaceSuggestionScreen> {
                   ),
                   style: const TextStyle(fontSize: 15),
                 ),
+                const SizedBox(height: 16),
+
+                _buildLocationPicker(),
                 const SizedBox(height: 16),
 
                 TextFormField(
@@ -297,200 +392,132 @@ class _AddPlaceSuggestionScreenState extends State<AddPlaceSuggestionScreen> {
 
                 TextFormField(
                   controller: _entryFeeController,
-                  decoration: _buildInputDecoration(label: 'Entry Fee Structure', prefixIcon: Icons.payments_rounded, hint: 'e.g., Free / ৳20 entry rate'),
+                  decoration: _buildInputDecoration(label: 'Entry Fee', prefixIcon: Icons.payments_rounded, hint: 'e.g., Free or 50 BDT'),
                   style: const TextStyle(fontSize: 15),
                 ),
                 const SizedBox(height: 16),
 
                 TextFormField(
                   controller: _openingHoursController,
-                  decoration: _buildInputDecoration(label: 'Opening Hours', prefixIcon: Icons.alarm_rounded, hint: 'e.g., 9:00 AM – 5:00 PM'),
+                  decoration: _buildInputDecoration(label: 'Opening Hours', prefixIcon: Icons.access_time_filled_rounded, hint: 'e.g., 9 AM - 6 PM'),
                   style: const TextStyle(fontSize: 15),
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 32),
 
-                // Coordinate Grouping
-                Row(
-                  children: [
-                    Expanded(
-                      child: TextFormField(
-                        controller: _latController,
-                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                        decoration: _buildInputDecoration(label: 'Latitude (Optional)', prefixIcon: Icons.pin_drop_rounded),
-                        style: const TextStyle(fontSize: 15),
-                      ),
-                    ),
-                    const SizedBox(width: 14),
-                    Expanded(
-                      child: TextFormField(
-                        controller: _lngController,
-                        keyboardType: const TextInputType.numberWithOptions(decimal: true),
-                        decoration: InputDecoration(
-                          labelText: 'Longitude (Optional)',
-                          labelStyle: TextStyle(color: darkTeal.withOpacity(0.7), fontSize: 14),
-                          filled: true,
-                          fillColor: Colors.white,
-                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
-                          enabledBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: BorderSide(color: Colors.grey.shade300, width: 1),
-                          ),
-                          focusedBorder: OutlineInputBorder(
-                            borderRadius: BorderRadius.circular(12),
-                            borderSide: const BorderSide(color: darkTeal, width: 1.5),
-                          ),
-                        ),
-                        style: const TextStyle(fontSize: 15),
-                      ),
-                    ),
-                  ],
+                const Text(
+                  'Upload Photos',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: darkTeal),
                 ),
-                const SizedBox(height: 28),
+                const SizedBox(height: 12),
 
-                // Media picker Header Info
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                  children: [
-                    const Text(
-                      'Visual Showcases',
-                      style: TextStyle(fontWeight: FontWeight.bold, fontSize: 15, color: darkTeal),
-                    ),
-                    if (_imageBytesList.isNotEmpty)
-                      TextButton.icon(
-                        onPressed: _pickImages,
-                        icon: const Icon(Icons.refresh_rounded, size: 18, color: softSage),
-                        label: const Text('Reselect', style: TextStyle(color: softSage, fontWeight: FontWeight.bold)),
-                      ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-
-                // Interactive Media Slot View Container
                 if (_imageBytesList.isEmpty)
-                  InkWell(
+                  GestureDetector(
                     onTap: _pickImages,
-                    borderRadius: BorderRadius.circular(12),
                     child: Container(
+                      height: 120,
                       width: double.infinity,
-                      height: 130,
                       decoration: BoxDecoration(
                         color: Colors.white,
                         borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: softSage.withOpacity(0.4), width: 1.5, style: BorderStyle.solid),
+                        border: Border.all(color: Colors.grey.shade300, style: BorderStyle.solid),
                       ),
                       child: Column(
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Icon(Icons.add_photo_alternate_rounded, size: 42, color: softSage.withOpacity(0.8)),
+                          Icon(Icons.add_photo_alternate_rounded, color: Colors.grey.shade400, size: 40),
                           const SizedBox(height: 8),
-                          Text(
-                            'Select Beautiful Destination Images',
-                            style: TextStyle(fontSize: 13, color: Colors.grey.shade600, fontWeight: FontWeight.w500),
-                          ),
-                          const SizedBox(height: 2),
-                          Text('Supports multiple image selections', style: TextStyle(fontSize: 11, color: Colors.grey.shade400)),
+                          Text('Tap to select photos', style: TextStyle(color: Colors.grey.shade500, fontSize: 13)),
                         ],
                       ),
                     ),
                   )
                 else
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      SizedBox(
-                        height: 110,
-                        child: ListView.builder(
-                          scrollDirection: Axis.horizontal,
-                          itemCount: _imageBytesList.length,
-                          itemBuilder: (context, index) {
-                            final isCover = (index == _coverIndex);
-                            return GestureDetector(
-                              onTap: () => _setCover(index),
-                              child: AnimatedContainer(
-                                duration: const Duration(milliseconds: 200),
-                                width: 110,
-                                margin: const EdgeInsets.only(right: 12),
-                                decoration: BoxDecoration(
-                                  borderRadius: BorderRadius.circular(12),
-                                  border: Border.all(
-                                    color: isCover ? softSage : Colors.transparent,
-                                    width: isCover ? 3 : 0,
-                                  ),
-                                ),
-                                child: Stack(
-                                  children: [
-                                    Positioned.fill(
-                                      child: ClipRRect(
-                                        borderRadius: BorderRadius.circular(isCover ? 8 : 10),
-                                        child: Image.memory(
-                                          _imageBytesList[index],
-                                          fit: BoxFit.cover,
-                                        ),
-                                      ),
-                                    ),
-                                    if (isCover)
-                                      Positioned(
-                                        top: 6,
-                                        right: 6,
-                                        child: Container(
-                                          padding: const EdgeInsets.all(4),
-                                          decoration: const BoxDecoration(
-                                            color: darkTeal,
-                                            shape: BoxShape.circle,
-                                          ),
-                                          child: const Icon(Icons.star_rounded, color: Colors.white, size: 12),
-                                        ),
-                                      ),
-                                  ],
+                  SizedBox(
+                    height: 120,
+                    child: ListView.builder(
+                      scrollDirection: Axis.horizontal,
+                      itemCount: _imageBytesList.length + 1,
+                      itemBuilder: (context, index) {
+                        if (index == _imageBytesList.length) {
+                          return GestureDetector(
+                            onTap: _pickImages,
+                            child: Container(
+                              width: 100,
+                              margin: const EdgeInsets.only(right: 8),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: Colors.grey.shade300),
+                              ),
+                              child: Icon(Icons.add, color: Colors.grey.shade400),
+                            ),
+                          );
+                        }
+                        return Stack(
+                          children: [
+                            Container(
+                              width: 100,
+                              margin: const EdgeInsets.only(right: 8),
+                              decoration: BoxDecoration(
+                                borderRadius: BorderRadius.circular(12),
+                                image: DecorationImage(
+                                  image: MemoryImage(_imageBytesList[index]),
+                                  fit: BoxFit.cover,
                                 ),
                               ),
-                            );
-                          },
-                        ),
-                      ),
-                      const Padding(
-                        padding: EdgeInsets.only(top: 10, left: 2),
-                        child: Row(
-                          children: [
-                            Icon(Icons.info_outline_rounded, size: 13, color: Colors.grey),
-                            SizedBox(width: 4),
-                            Text(
-                              'Tap an image thumbnail to set it as the cover display photo.',
-                              style: TextStyle(fontSize: 11, color: Colors.grey, fontWeight: FontWeight.w500),
+                            ),
+                            if (index == 0)
+                              Positioned(
+                                top: 4,
+                                left: 4,
+                                child: Container(
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(color: darkTeal, borderRadius: BorderRadius.circular(4)),
+                                  child: const Text('COVER', style: TextStyle(color: Colors.white, fontSize: 8, fontWeight: FontWeight.bold)),
+                                ),
+                              ),
+                            Positioned(
+                              top: 4,
+                              right: 12,
+                              child: GestureDetector(
+                                onTap: () {
+                                  setState(() {
+                                    _imageBytesList.removeAt(index);
+                                    _imageFileNames.removeAt(index);
+                                  });
+                                },
+                                child: Container(
+                                  padding: const EdgeInsets.all(2),
+                                  decoration: const BoxDecoration(color: Colors.red, shape: BoxShape.circle),
+                                  child: const Icon(Icons.close, color: Colors.white, size: 14),
+                                ),
+                              ),
                             ),
                           ],
-                        ),
-                      ),
-                    ],
+                        );
+                      },
+                    ),
                   ),
+
                 const SizedBox(height: 40),
 
-                // Action Submission CTA Button
                 SizedBox(
                   width: double.infinity,
-                  height: 52,
+                  height: 54,
                   child: ElevatedButton(
                     onPressed: _loading ? null : _submitSuggestion,
                     style: ElevatedButton.styleFrom(
                       backgroundColor: darkTeal,
                       foregroundColor: Colors.white,
-                      disabledBackgroundColor: darkTeal.withOpacity(0.6),
                       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                       elevation: 2,
                     ),
                     child: _loading
-                        ? const SizedBox(
-                      width: 24,
-                      height: 24,
-                      child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2.5),
-                    )
-                        : const Text(
-                      'Submit Place Suggestion',
-                      style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, letterSpacing: 0.3),
-                    ),
+                        ? const SizedBox(width: 24, height: 24, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                        : const Text('Submit Suggestion', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
                   ),
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: 40),
               ],
             ),
           ),

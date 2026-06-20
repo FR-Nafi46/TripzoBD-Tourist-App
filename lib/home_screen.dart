@@ -119,7 +119,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Bangladesh Tourist App'),
+        title: const Text('TipzoBD'),
         actions: [
           Stack(
             children: [
@@ -322,10 +322,9 @@ class _HomeScreenState extends State<HomeScreen> {
             _drawerItem(context, 'Currency Converter', Icons.attach_money, () => Navigator.push(context, MaterialPageRoute(builder: (_) => const CurrencyConverterScreen()))),
             _drawerItem(context, 'Messages', Icons.chat, () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ChatListScreen()))),
             const Divider(),
-            _drawerItem(context, 'Hotel Booking', Icons.hotel, () => Navigator.push(context, MaterialPageRoute(builder: (_) => const HotelBookingScreen()))),
-            _drawerItem(context, 'Transport Booking', Icons.directions_bus, () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TransportBookingScreen()))),
+            _drawerItem(context, 'Hotel Information', Icons.hotel, () => Navigator.push(context, MaterialPageRoute(builder: (_) => const HotelBookingScreen()))),
+            _drawerItem(context, 'Transport Information', Icons.directions_bus, () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TransportBookingScreen()))),
             _drawerItem(context, 'Tour Guide Booking', Icons.person_pin, () => Navigator.push(context, MaterialPageRoute(builder: (_) => const TourGuideBookingScreen()))),
-            _drawerItem(context, 'Booking History', Icons.history, () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BookingHistoryScreen()))),
             _drawerItem(context, 'Payment', Icons.payment, () => Navigator.push(context, MaterialPageRoute(builder: (_) => const PaymentScreen()))),
             const Divider(),
             _drawerItem(context, 'Profile', Icons.person, () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileScreen()))),

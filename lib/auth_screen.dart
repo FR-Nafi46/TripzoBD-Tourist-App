@@ -18,23 +18,26 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
   bool _isTouristLoginView = true;
   bool _isGuideLoginView = true;
 
-  // Password visibility
+  // Password visibility toggles
   bool _obscureTouristLoginPassword = true;
   bool _obscureTouristSignupPassword = true;
+  bool _obscureTouristSignupConfirm = true;
   bool _obscureGuideLoginPassword = true;
   bool _obscureGuideSignupPassword = true;
+  bool _obscureGuideSignupConfirm = true;
 
   // Tourist controllers
   final _touristNameController = TextEditingController();
   final _touristEmailController = TextEditingController();
   final _touristPasswordController = TextEditingController();
+  final _touristConfirmPasswordController = TextEditingController();
 
   // Guide controllers
   final _guideNameController = TextEditingController();
   final _guideEmailController = TextEditingController();
   final _guidePasswordController = TextEditingController();
+  final _guideConfirmPasswordController = TextEditingController();
   final _guideDivisionController = TextEditingController();
-  // Language controller removed
   final _guidePricePerDayController = TextEditingController();
   final _guideBioController = TextEditingController();
 
@@ -42,6 +45,11 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
   bool _loadingTouristSignup = false;
   bool _loadingGuideLogin = false;
   bool _loadingGuideSignup = false;
+
+  // Password regex: at least one uppercase, one lowercase, one special character
+  final RegExp _passwordRegex = RegExp(
+    r'^(?=.*[a-z])(?=.*[A-Z])(?=.*[!@#$%^&*(),.?":{}|<>])',
+  );
 
   @override
   void initState() {
@@ -55,9 +63,11 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
     _touristNameController.dispose();
     _touristEmailController.dispose();
     _touristPasswordController.dispose();
+    _touristConfirmPasswordController.dispose();
     _guideNameController.dispose();
     _guideEmailController.dispose();
     _guidePasswordController.dispose();
+    _guideConfirmPasswordController.dispose();
     _guideDivisionController.dispose();
     _guidePricePerDayController.dispose();
     _guideBioController.dispose();
@@ -140,16 +150,94 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
     }
   }
 
+  // Forgot password dialog
+  void _showForgotPasswordDialog() {
+    final emailController = TextEditingController();
+    bool sending = false;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setStateDialog) {
+          return AlertDialog(
+            title: const Text('Reset Password'),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Text('Enter your email address and we\'ll send you a password reset link.'),
+                const SizedBox(height: 16),
+                TextField(
+                  controller: emailController,
+                  keyboardType: TextInputType.emailAddress,
+                  decoration: InputDecoration(
+                    labelText: 'Email',
+                    prefixIcon: const Icon(Icons.email_outlined),
+                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: sending ? null : () => Navigator.pop(ctx),
+                child: const Text('Cancel'),
+              ),
+              ElevatedButton(
+                onPressed: sending
+                    ? null
+                    : () async {
+                  final email = emailController.text.trim();
+                  if (email.isEmpty) {
+                    ScaffoldMessenger.of(ctx).showSnackBar(
+                      const SnackBar(content: Text('Please enter your email.')),
+                    );
+                    return;
+                  }
+                  setStateDialog(() => sending = true);
+                  await _sendPasswordReset(email);
+                  setStateDialog(() => sending = false);
+                  if (mounted) Navigator.pop(ctx);
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: const Color(0xFF8EB69B),
+                  foregroundColor: Colors.white,
+                ),
+                child: sending
+                    ? const SizedBox(
+                  width: 20,
+                  height: 20,
+                  child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                )
+                    : const Text('Send Link'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
   Future<void> _touristSignup() async {
     final name = _touristNameController.text.trim();
     final email = _touristEmailController.text.trim();
     final password = _touristPasswordController.text.trim();
-    if (name.isEmpty || email.isEmpty || password.isEmpty) {
+    final confirm = _touristConfirmPasswordController.text.trim();
+
+    if (name.isEmpty || email.isEmpty || password.isEmpty || confirm.isEmpty) {
       _showError('All fields are required');
       return;
     }
     if (password.length < 6) {
       _showError('Password must be at least 6 characters');
+      return;
+    }
+    if (password != confirm) {
+      _showError('Passwords do not match');
+      return;
+    }
+    if (!_passwordRegex.hasMatch(password)) {
+      _showError('Password must contain at least one uppercase, one lowercase, and one special character');
       return;
     }
     if (!email.contains('@')) {
@@ -193,7 +281,6 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
   }
 
   // ---------- Guide Methods ---------- //
-
   Future<void> _guideLogin() async {
     final email = _guideEmailController.text.trim();
     final password = _guidePasswordController.text.trim();
@@ -244,16 +331,25 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
     final name = _guideNameController.text.trim();
     final email = _guideEmailController.text.trim();
     final password = _guidePasswordController.text.trim();
+    final confirm = _guideConfirmPasswordController.text.trim();
     final division = _guideDivisionController.text.trim();
     final priceStr = _guidePricePerDayController.text.trim();
     final bio = _guideBioController.text.trim();
 
-    if (name.isEmpty || email.isEmpty || password.isEmpty || division.isEmpty || priceStr.isEmpty) {
+    if (name.isEmpty || email.isEmpty || password.isEmpty || confirm.isEmpty || division.isEmpty || priceStr.isEmpty) {
       _showError('Please fill all required fields (*)');
       return;
     }
     if (password.length < 6) {
       _showError('Password must be at least 6 characters');
+      return;
+    }
+    if (password != confirm) {
+      _showError('Passwords do not match');
+      return;
+    }
+    if (!_passwordRegex.hasMatch(password)) {
+      _showError('Password must contain at least one uppercase, one lowercase, and one special character');
       return;
     }
     if (!email.contains('@')) {
@@ -279,7 +375,6 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
         return;
       }
 
-      // Language field removed from signup data
       final res = await supabase.auth.signUp(
         email: email,
         password: password,
@@ -290,7 +385,6 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
           'price_per_day': price,
           'bio': bio,
           'is_approved': false,
-          // languages not sent – will default to empty array in DB
         },
       );
       if (res.user == null) throw Exception('Sign up failed');
@@ -315,12 +409,14 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
     _touristNameController.clear();
     _touristEmailController.clear();
     _touristPasswordController.clear();
+    _touristConfirmPasswordController.clear();
   }
 
   void _clearGuideFields() {
     _guideNameController.clear();
     _guideEmailController.clear();
     _guidePasswordController.clear();
+    _guideConfirmPasswordController.clear();
     _guideDivisionController.clear();
     _guidePricePerDayController.clear();
     _guideBioController.clear();
@@ -341,7 +437,7 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
       body: SafeArea(
         child: Column(
           children: [
-            // Top branding (unchanged)
+            // Top branding
             Container(
               padding: const EdgeInsets.only(top: 20, bottom: 15),
               child: Column(
@@ -353,13 +449,14 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
                   ),
                   const SizedBox(height: 12),
                   const Text(
-                    'Bangladesh Travel Support',
-                    style: TextStyle(fontSize: 22, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: 0.5),
+                    'Supporting your journey,\nevery step of the way',
+                    style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: Colors.white, letterSpacing: 0.5),
+                    textAlign: TextAlign.center,
                   ),
                 ],
               ),
             ),
-            // Tab Bar (unchanged)
+            // Tab Bar
             Container(
               margin: const EdgeInsets.symmetric(horizontal: 24),
               decoration: BoxDecoration(color: Colors.black12, borderRadius: BorderRadius.circular(32)),
@@ -400,82 +497,155 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
         child: AnimatedCrossFade(
           duration: const Duration(milliseconds: 300),
           crossFadeState: _isTouristLoginView ? CrossFadeState.showFirst : CrossFadeState.showSecond,
-          firstChild: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('Tourist Login', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black87)),
-              const SizedBox(height: 20),
-              TextField(
-                controller: _touristEmailController,
-                keyboardType: TextInputType.emailAddress,
-                decoration: InputDecoration(labelText: 'Email', prefixIcon: const Icon(Icons.email_outlined), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12))),
-              ),
-              const SizedBox(height: 16),
-              TextField(
-                controller: _touristPasswordController,
-                obscureText: _obscureTouristLoginPassword,
-                decoration: InputDecoration(
-                  labelText: 'Password',
-                  prefixIcon: const Icon(Icons.lock_outline),
-                  suffixIcon: IconButton(
-                    icon: Icon(_obscureTouristLoginPassword ? Icons.visibility_off : Icons.visibility, color: Colors.grey),
-                    onPressed: () => setState(() => _obscureTouristLoginPassword = !_obscureTouristLoginPassword),
-                  ),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-              ),
-              const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                height: 50,
-                child: ElevatedButton(
-                  onPressed: _loadingTouristLogin ? null : _touristLogin,
-                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF8EB69B), foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-                  child: _loadingTouristLogin ? const CircularProgressIndicator(color: Colors.white) : const Text('Login as Tourist', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                ),
-              ),
-              const SizedBox(height: 20),
-              Center(child: TextButton(onPressed: () => setState(() => _isTouristLoginView = false), child: const Text("Don't have an account? Sign Up", style: TextStyle(color: Color(0xFF8EB69B), fontWeight: FontWeight.w600)))),
-            ],
-          ),
-          secondChild: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('Tourist Registration', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black87)),
-              const SizedBox(height: 20),
-              TextField(controller: _touristNameController, decoration: InputDecoration(labelText: 'Full Name', prefixIcon: const Icon(Icons.person_outline), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)))),
-              const SizedBox(height: 16),
-              TextField(controller: _touristEmailController, keyboardType: TextInputType.emailAddress, decoration: InputDecoration(labelText: 'Email', prefixIcon: const Icon(Icons.email_outlined), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)))),
-              const SizedBox(height: 16),
-              TextField(
-                controller: _touristPasswordController,
-                obscureText: _obscureTouristSignupPassword,
-                decoration: InputDecoration(
-                  labelText: 'Password (min 6)',
-                  prefixIcon: const Icon(Icons.lock_outline),
-                  suffixIcon: IconButton(
-                    icon: Icon(_obscureTouristSignupPassword ? Icons.visibility_off : Icons.visibility, color: Colors.grey),
-                    onPressed: () => setState(() => _obscureTouristSignupPassword = !_obscureTouristSignupPassword),
-                  ),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-              ),
-              const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                height: 50,
-                child: ElevatedButton(
-                  onPressed: _loadingTouristSignup ? null : _touristSignup,
-                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF8EB69B), foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-                  child: _loadingTouristSignup ? const CircularProgressIndicator(color: Colors.white) : const Text('Register as Tourist', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                ),
-              ),
-              const SizedBox(height: 20),
-              Center(child: TextButton(onPressed: () => setState(() => _isTouristLoginView = true), child: const Text("Already have an account? Login", style: TextStyle(color: Color(0xFF8EB69B), fontWeight: FontWeight.w600)))),
-            ],
-          ),
+          firstChild: _buildTouristLogin(),
+          secondChild: _buildTouristSignup(),
         ),
       ),
+    );
+  }
+
+  Widget _buildTouristLogin() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Tourist Login', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black87)),
+        const SizedBox(height: 20),
+        TextField(
+          controller: _touristEmailController,
+          keyboardType: TextInputType.emailAddress,
+          decoration: InputDecoration(
+            labelText: 'Email',
+            prefixIcon: const Icon(Icons.email_outlined),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        ),
+        const SizedBox(height: 16),
+        TextField(
+          controller: _touristPasswordController,
+          obscureText: _obscureTouristLoginPassword,
+          decoration: InputDecoration(
+            labelText: 'Password',
+            prefixIcon: const Icon(Icons.lock_outline),
+            suffixIcon: IconButton(
+              icon: Icon(_obscureTouristLoginPassword ? Icons.visibility_off : Icons.visibility, color: Colors.grey),
+              onPressed: () => setState(() => _obscureTouristLoginPassword = !_obscureTouristLoginPassword),
+            ),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        ),
+        const SizedBox(height: 24),
+        SizedBox(
+          width: double.infinity,
+          height: 50,
+          child: ElevatedButton(
+            onPressed: _loadingTouristLogin ? null : _touristLogin,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF8EB69B),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            child: _loadingTouristLogin
+                ? const CircularProgressIndicator(color: Colors.white)
+                : const Text('Login as Tourist', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Center(
+          child: TextButton(
+            onPressed: _showForgotPasswordDialog,
+            child: const Text(
+              'Forgot Password?',
+              style: TextStyle(color: Color(0xFF8EB69B), fontWeight: FontWeight.w600),
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Center(
+          child: TextButton(
+            onPressed: () => setState(() => _isTouristLoginView = false),
+            child: const Text("Don't have an account? Sign Up", style: TextStyle(color: Color(0xFF8EB69B), fontWeight: FontWeight.w600)),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildTouristSignup() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Tourist Registration', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black87)),
+        const SizedBox(height: 20),
+        TextField(
+          controller: _touristNameController,
+          decoration: InputDecoration(
+            labelText: 'Full Name',
+            prefixIcon: const Icon(Icons.person_outline),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        ),
+        const SizedBox(height: 16),
+        TextField(
+          controller: _touristEmailController,
+          keyboardType: TextInputType.emailAddress,
+          decoration: InputDecoration(
+            labelText: 'Email',
+            prefixIcon: const Icon(Icons.email_outlined),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        ),
+        const SizedBox(height: 16),
+        TextField(
+          controller: _touristPasswordController,
+          obscureText: _obscureTouristSignupPassword,
+          decoration: InputDecoration(
+            labelText: 'Password (min 6, upper, lower, special)',
+            prefixIcon: const Icon(Icons.lock_outline),
+            suffixIcon: IconButton(
+              icon: Icon(_obscureTouristSignupPassword ? Icons.visibility_off : Icons.visibility, color: Colors.grey),
+              onPressed: () => setState(() => _obscureTouristSignupPassword = !_obscureTouristSignupPassword),
+            ),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        ),
+        const SizedBox(height: 16),
+        TextField(
+          controller: _touristConfirmPasswordController,
+          obscureText: _obscureTouristSignupConfirm,
+          decoration: InputDecoration(
+            labelText: 'Confirm Password',
+            prefixIcon: const Icon(Icons.lock_outline),
+            suffixIcon: IconButton(
+              icon: Icon(_obscureTouristSignupConfirm ? Icons.visibility_off : Icons.visibility, color: Colors.grey),
+              onPressed: () => setState(() => _obscureTouristSignupConfirm = !_obscureTouristSignupConfirm),
+            ),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        ),
+        const SizedBox(height: 24),
+        SizedBox(
+          width: double.infinity,
+          height: 50,
+          child: ElevatedButton(
+            onPressed: _loadingTouristSignup ? null : _touristSignup,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF8EB69B),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            child: _loadingTouristSignup
+                ? const CircularProgressIndicator(color: Colors.white)
+                : const Text('Register as Tourist', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          ),
+        ),
+        const SizedBox(height: 20),
+        Center(
+          child: TextButton(
+            onPressed: () => setState(() => _isTouristLoginView = true),
+            child: const Text("Already have an account? Login", style: TextStyle(color: Color(0xFF8EB69B), fontWeight: FontWeight.w600)),
+          ),
+        ),
+      ],
     );
   }
 
@@ -489,85 +659,184 @@ class _AuthScreenState extends State<AuthScreen> with SingleTickerProviderStateM
         child: AnimatedCrossFade(
           duration: const Duration(milliseconds: 300),
           crossFadeState: _isGuideLoginView ? CrossFadeState.showFirst : CrossFadeState.showSecond,
-          firstChild: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('Guide Login', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black87)),
-              const SizedBox(height: 20),
-              TextField(controller: _guideEmailController, keyboardType: TextInputType.emailAddress, decoration: InputDecoration(labelText: 'Email', prefixIcon: const Icon(Icons.email_outlined), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)))),
-              const SizedBox(height: 16),
-              TextField(
-                controller: _guidePasswordController,
-                obscureText: _obscureGuideLoginPassword,
-                decoration: InputDecoration(
-                  labelText: 'Password',
-                  prefixIcon: const Icon(Icons.lock_outline),
-                  suffixIcon: IconButton(
-                    icon: Icon(_obscureGuideLoginPassword ? Icons.visibility_off : Icons.visibility, color: Colors.grey),
-                    onPressed: () => setState(() => _obscureGuideLoginPassword = !_obscureGuideLoginPassword),
-                  ),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-              ),
-              const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                height: 50,
-                child: ElevatedButton(
-                  onPressed: _loadingGuideLogin ? null : _guideLogin,
-                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF8EB69B), foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-                  child: _loadingGuideLogin ? const CircularProgressIndicator(color: Colors.white) : const Text('Login as Guide', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                ),
-              ),
-              const SizedBox(height: 20),
-              Center(child: TextButton(onPressed: () => setState(() => _isGuideLoginView = false), child: const Text("New Guide? Join Us here", style: TextStyle(color: Color(0xFF8EB69B), fontWeight: FontWeight.w600)))),
-            ],
-          ),
-          secondChild: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              const Text('Guide Registration', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black87)),
-              const SizedBox(height: 20),
-              TextField(controller: _guideNameController, decoration: InputDecoration(labelText: 'Full Name *', prefixIcon: const Icon(Icons.person_outline), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)))),
-              const SizedBox(height: 16),
-              TextField(controller: _guideEmailController, keyboardType: TextInputType.emailAddress, decoration: InputDecoration(labelText: 'Email *', prefixIcon: const Icon(Icons.email_outlined), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)))),
-              const SizedBox(height: 16),
-              TextField(
-                controller: _guidePasswordController,
-                obscureText: _obscureGuideSignupPassword,
-                decoration: InputDecoration(
-                  labelText: 'Password (min 6) *',
-                  prefixIcon: const Icon(Icons.lock_outline),
-                  suffixIcon: IconButton(
-                    icon: Icon(_obscureGuideSignupPassword ? Icons.visibility_off : Icons.visibility, color: Colors.grey),
-                    onPressed: () => setState(() => _obscureGuideSignupPassword = !_obscureGuideSignupPassword),
-                  ),
-                  border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                ),
-              ),
-              const SizedBox(height: 16),
-              TextField(controller: _guideDivisionController, decoration: InputDecoration(labelText: 'Operating Division *', prefixIcon: const Icon(Icons.location_on_outlined), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)))),
-              // Language field removed here
-              const SizedBox(height: 16),
-              TextField(controller: _guidePricePerDayController, keyboardType: TextInputType.number, decoration: InputDecoration(labelText: 'Price per Day (BDT) *', prefixIcon: const Icon(Icons.payments_outlined), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)))),
-              const SizedBox(height: 16),
-              TextField(controller: _guideBioController, maxLines: 3, decoration: InputDecoration(labelText: 'Bio / Experience Narrative', prefixIcon: const Icon(Icons.info_outline), border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)))),
-              const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                height: 50,
-                child: ElevatedButton(
-                  onPressed: _loadingGuideSignup ? null : _guideSignup,
-                  style: ElevatedButton.styleFrom(backgroundColor: const Color(0xFF8EB69B), foregroundColor: Colors.white, shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))),
-                  child: _loadingGuideSignup ? const CircularProgressIndicator(color: Colors.white) : const Text('Register as Guide', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
-                ),
-              ),
-              const SizedBox(height: 20),
-              Center(child: TextButton(onPressed: () => setState(() => _isGuideLoginView = true), child: const Text("Already have an account? Login", style: TextStyle(color: Color(0xFF8EB69B), fontWeight: FontWeight.w600)))),
-            ],
-          ),
+          firstChild: _buildGuideLogin(),
+          secondChild: _buildGuideSignup(),
         ),
       ),
+    );
+  }
+
+  Widget _buildGuideLogin() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Guide Login', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black87)),
+        const SizedBox(height: 20),
+        TextField(
+          controller: _guideEmailController,
+          keyboardType: TextInputType.emailAddress,
+          decoration: InputDecoration(
+            labelText: 'Email',
+            prefixIcon: const Icon(Icons.email_outlined),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        ),
+        const SizedBox(height: 16),
+        TextField(
+          controller: _guidePasswordController,
+          obscureText: _obscureGuideLoginPassword,
+          decoration: InputDecoration(
+            labelText: 'Password',
+            prefixIcon: const Icon(Icons.lock_outline),
+            suffixIcon: IconButton(
+              icon: Icon(_obscureGuideLoginPassword ? Icons.visibility_off : Icons.visibility, color: Colors.grey),
+              onPressed: () => setState(() => _obscureGuideLoginPassword = !_obscureGuideLoginPassword),
+            ),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        ),
+        const SizedBox(height: 24),
+        SizedBox(
+          width: double.infinity,
+          height: 50,
+          child: ElevatedButton(
+            onPressed: _loadingGuideLogin ? null : _guideLogin,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF8EB69B),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            child: _loadingGuideLogin
+                ? const CircularProgressIndicator(color: Colors.white)
+                : const Text('Login as Guide', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          ),
+        ),
+        const SizedBox(height: 12),
+        Center(
+          child: TextButton(
+            onPressed: _showForgotPasswordDialog,
+            child: const Text(
+              'Forgot Password?',
+              style: TextStyle(color: Color(0xFF8EB69B), fontWeight: FontWeight.w600),
+            ),
+          ),
+        ),
+        const SizedBox(height: 8),
+        Center(
+          child: TextButton(
+            onPressed: () => setState(() => _isGuideLoginView = false),
+            child: const Text("New Guide? Join Us here", style: TextStyle(color: Color(0xFF8EB69B), fontWeight: FontWeight.w600)),
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildGuideSignup() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('Guide Registration', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: Colors.black87)),
+        const SizedBox(height: 20),
+        TextField(
+          controller: _guideNameController,
+          decoration: InputDecoration(
+            labelText: 'Full Name *',
+            prefixIcon: const Icon(Icons.person_outline),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        ),
+        const SizedBox(height: 16),
+        TextField(
+          controller: _guideEmailController,
+          keyboardType: TextInputType.emailAddress,
+          decoration: InputDecoration(
+            labelText: 'Email *',
+            prefixIcon: const Icon(Icons.email_outlined),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        ),
+        const SizedBox(height: 16),
+        TextField(
+          controller: _guidePasswordController,
+          obscureText: _obscureGuideSignupPassword,
+          decoration: InputDecoration(
+            labelText: 'Password (min 6, upper, lower, special) *',
+            prefixIcon: const Icon(Icons.lock_outline),
+            suffixIcon: IconButton(
+              icon: Icon(_obscureGuideSignupPassword ? Icons.visibility_off : Icons.visibility, color: Colors.grey),
+              onPressed: () => setState(() => _obscureGuideSignupPassword = !_obscureGuideSignupPassword),
+            ),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        ),
+        const SizedBox(height: 16),
+        TextField(
+          controller: _guideConfirmPasswordController,
+          obscureText: _obscureGuideSignupConfirm,
+          decoration: InputDecoration(
+            labelText: 'Confirm Password *',
+            prefixIcon: const Icon(Icons.lock_outline),
+            suffixIcon: IconButton(
+              icon: Icon(_obscureGuideSignupConfirm ? Icons.visibility_off : Icons.visibility, color: Colors.grey),
+              onPressed: () => setState(() => _obscureGuideSignupConfirm = !_obscureGuideSignupConfirm),
+            ),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        ),
+        const SizedBox(height: 16),
+        TextField(
+          controller: _guideDivisionController,
+          decoration: InputDecoration(
+            labelText: 'Operating Division *',
+            prefixIcon: const Icon(Icons.location_on_outlined),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        ),
+        const SizedBox(height: 16),
+        TextField(
+          controller: _guidePricePerDayController,
+          keyboardType: TextInputType.number,
+          decoration: InputDecoration(
+            labelText: 'Price per Day (BDT) *',
+            prefixIcon: const Icon(Icons.payments_outlined),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        ),
+        const SizedBox(height: 16),
+        TextField(
+          controller: _guideBioController,
+          maxLines: 3,
+          decoration: InputDecoration(
+            labelText: 'Bio / Experience Narrative',
+            prefixIcon: const Icon(Icons.info_outline),
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        ),
+        const SizedBox(height: 24),
+        SizedBox(
+          width: double.infinity,
+          height: 50,
+          child: ElevatedButton(
+            onPressed: _loadingGuideSignup ? null : _guideSignup,
+            style: ElevatedButton.styleFrom(
+              backgroundColor: const Color(0xFF8EB69B),
+              foregroundColor: Colors.white,
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+            ),
+            child: _loadingGuideSignup
+                ? const CircularProgressIndicator(color: Colors.white)
+                : const Text('Register as Guide', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold)),
+          ),
+        ),
+        const SizedBox(height: 20),
+        Center(
+          child: TextButton(
+            onPressed: () => setState(() => _isGuideLoginView = true),
+            child: const Text("Already have an account? Login", style: TextStyle(color: Color(0xFF8EB69B), fontWeight: FontWeight.w600)),
+          ),
+        ),
+      ],
     );
   }
 }

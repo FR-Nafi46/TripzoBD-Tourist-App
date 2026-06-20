@@ -77,8 +77,8 @@ class _SplashScreenState extends State<SplashScreen> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             Container(
-              width: 140,
-              height: 140,
+              width: 170,
+              height: 170,
               decoration: const BoxDecoration(
                 color: Colors.white,
                 shape: BoxShape.circle,
@@ -86,15 +86,15 @@ class _SplashScreenState extends State<SplashScreen> {
               child: Center(
                 child: Image.asset(
                   'assets/company/BDTSlogo.png',
-                  width: 170,
-                  height: 170,
+                  width: 150,
+                  height: 150,
                   fit: BoxFit.contain,
                 ),
               ),
             ),
             const SizedBox(height: 24),
             const Text(
-              'Bangladesh Travel Support',
+              'Supporting your journey,\nevery step of the way',
               style: TextStyle(
                 fontSize: 22,
                 fontWeight: FontWeight.bold,

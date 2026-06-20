@@ -6,6 +6,7 @@ import 'auth_screen.dart';
 import 'chat_list_screen.dart';
 import 'chat_screen.dart';
 import 'booking_history_screen.dart';
+import 'map_screen.dart'; // <-- added import
 
 class GuideHomeScreen extends StatefulWidget {
   const GuideHomeScreen({super.key});
@@ -641,13 +642,14 @@ class _GuideHomeScreenState extends State<GuideHomeScreen> {
                   ),
                 ),
 
-              // ----- Unified Quick Action Layout -----
+              // ----- Unified Quick Action Layout (now includes Map) -----
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceEvenly,
                 children: [
                   _quickAction(Icons.person_outline_rounded, 'Profile', 0, () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ProfileScreen()))),
                   _quickAction(Icons.history_rounded, 'History', 0, () => Navigator.push(context, MaterialPageRoute(builder: (_) => const BookingHistoryScreen()))),
                   _quickAction(Icons.chat_bubble_outline_rounded, 'Messages', _unreadCount, () => Navigator.push(context, MaterialPageRoute(builder: (_) => const ChatListScreen()))),
+                  _quickAction(Icons.map_rounded, 'Map', 0, () => Navigator.push(context, MaterialPageRoute(builder: (_) => const MapScreen()))), // <-- added Map button
                 ],
               ),
               const SizedBox(height: 24),

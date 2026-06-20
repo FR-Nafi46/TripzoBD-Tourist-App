@@ -1,7 +1,7 @@
-import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'main.dart';
 
 class PlaceDetailsScreen extends StatefulWidget {
@@ -67,9 +67,10 @@ class _PlaceDetailsScreenState extends State<PlaceDetailsScreen> {
     final placeId = widget.place['id'];
     final user = supabase.auth.currentUser;
     try {
+      // Updated to fetch avatar_url from the profiles table relational link
       final reviewsData = await supabase
           .from('place_reviews')
-          .select('*, profiles(full_name)')
+          .select('*, profiles(full_name, avatar_url)')
           .eq('place_id', placeId)
           .order('created_at', ascending: false);
 
@@ -84,7 +85,6 @@ class _PlaceDetailsScreenState extends State<PlaceDetailsScreen> {
       _avgRating = (placeStats['avg_rating'] ?? 0.0).toDouble();
       _totalReviews = placeStats['total_reviews'] ?? 0;
 
-      // Find user's own review – fixed version without orElse: null
       if (user != null) {
         _userReview = null;
         for (var r in _reviews) {
@@ -101,7 +101,7 @@ class _PlaceDetailsScreenState extends State<PlaceDetailsScreen> {
         _userReview = null;
       }
     } catch (e) {
-      print('Error loading reviews: $e');
+      debugPrint('Error loading reviews: $e');
     } finally {
       if (mounted) setState(() => _reviewsLoading = false);
     }
@@ -138,7 +138,7 @@ class _PlaceDetailsScreenState extends State<PlaceDetailsScreen> {
           'updated_at': DateTime.now().toIso8601String(),
         })
             .eq('id', _userReview!['id']);
-        _showMessage('Review updated!');
+        _showMessage('Review updated successfully!');
       } else {
         await supabase.from('place_reviews').insert({
           'place_id': placeId,
@@ -146,7 +146,7 @@ class _PlaceDetailsScreenState extends State<PlaceDetailsScreen> {
           'rating': _userRating,
           'comment': comment.isEmpty ? null : comment,
         });
-        _showMessage('Review added!');
+        _showMessage('Review added successfully!');
       }
 
       setState(() {
@@ -169,13 +169,14 @@ class _PlaceDetailsScreenState extends State<PlaceDetailsScreen> {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('Delete Review'),
-        content: const Text('Are you sure you want to delete your review?'),
+        title: const Text('Delete Review', style: TextStyle(fontWeight: FontWeight.bold, color: MyApp.primaryColor)),
+        content: const Text('Are you sure you want to permanently delete your review?'),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel')),
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('Cancel', style: TextStyle(color: Colors.grey))),
           TextButton(
             onPressed: () => Navigator.pop(ctx, true),
-            child: const Text('Delete', style: TextStyle(color: Colors.red)),
+            child: const Text('Delete', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold)),
           ),
         ],
       ),
@@ -228,18 +229,21 @@ class _PlaceDetailsScreenState extends State<PlaceDetailsScreen> {
     final stars = <Widget>[];
     for (int i = 0; i < 5; i++) {
       if (i < fullStars) {
-        stars.add(Icon(Icons.star, size: size, color: Colors.amber));
+        stars.add(Icon(Icons.star_rounded, size: size, color: const Color(0xFFFFB300)));
       } else if (i == fullStars && fractional > 0) {
-        stars.add(Icon(Icons.star_half, size: size, color: Colors.amber));
+        stars.add(Icon(Icons.star_half_rounded, size: size, color: const Color(0xFFFFB300)));
       } else {
-        stars.add(Icon(Icons.star_border, size: size, color: Colors.amber));
+        stars.add(Icon(Icons.star_border_rounded, size: size, color: Colors.grey.shade300));
       }
     }
     if (showNumber) {
-      stars.add(const SizedBox(width: 6));
-      stars.add(Text(rating.toStringAsFixed(1), style: TextStyle(fontSize: size, fontWeight: FontWeight.bold)));
+      stars.add(const SizedBox(width: 8));
+      stars.add(Text(
+        rating.toStringAsFixed(1),
+        style: TextStyle(fontSize: size - 2, fontWeight: FontWeight.bold, color: MyApp.primaryColor),
+      ));
     }
-    return Row(children: stars);
+    return Row(mainAxisSize: MainAxisSize.min, children: stars);
   }
 
   Widget _buildRatingSelector() {
@@ -248,15 +252,40 @@ class _PlaceDetailsScreenState extends State<PlaceDetailsScreen> {
         int value = index + 1;
         return IconButton(
           icon: Icon(
-            _userRating >= value ? Icons.star : Icons.star_border,
-            color: Colors.amber,
-            size: 32,
+            _userRating >= value ? Icons.star_rounded : Icons.star_border_rounded,
+            color: const Color(0xFFFFB300),
+            size: 40,
           ),
           onPressed: () => setState(() => _userRating = value),
           padding: EdgeInsets.zero,
           constraints: const BoxConstraints(),
         );
       }),
+    );
+  }
+
+  Widget _buildDistributionLine(String star, double percentage) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2.0),
+      child: Row(
+        children: [
+          Text(star, style: TextStyle(fontSize: 12, color: Colors.grey.shade600, fontWeight: FontWeight.bold)),
+          const SizedBox(width: 4),
+          const Icon(Icons.star_rounded, size: 12, color: Color(0xFFFFB300)),
+          const SizedBox(width: 8),
+          Expanded(
+            child: ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: percentage,
+                backgroundColor: Colors.grey.shade200,
+                valueColor: const AlwaysStoppedAnimation<Color>(MyApp.secondaryColor),
+                minHeight: 6,
+              ),
+            ),
+          ),
+        ],
+      ),
     );
   }
 
@@ -295,10 +324,10 @@ class _PlaceDetailsScreenState extends State<PlaceDetailsScreen> {
           widget.place['images'] = updatedImages;
           _loadImages();
         });
-        _showMessage('Added ${newImageUrls.length} photo(s)!');
+        _showMessage('Successfully added ${newImageUrls.length} image(s)!');
       }
     } catch (e) {
-      _showMessage('Failed to upload: $e', isError: true);
+      _showMessage('Failed to upload images: $e', isError: true);
     } finally {
       if (mounted) setState(() => _addingPhotos = false);
     }
@@ -311,11 +340,12 @@ class _PlaceDetailsScreenState extends State<PlaceDetailsScreen> {
     bool confirm = await showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Delete Photo'),
-        content: const Text('Remove this photo from the gallery?'),
+        title: const Text('Delete Photo', style: TextStyle(fontWeight: FontWeight.bold, color: MyApp.primaryColor)),
+        content: const Text('Are you sure you want to remove this image from the gallery?'),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
-          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Delete', style: TextStyle(color: Colors.red))),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel', style: TextStyle(color: Colors.grey))),
+          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Delete', style: TextStyle(color: Colors.redAccent, fontWeight: FontWeight.bold))),
         ],
       ),
     ) ?? false;
@@ -352,7 +382,8 @@ class _PlaceDetailsScreenState extends State<PlaceDetailsScreen> {
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
       content: Text(msg),
       behavior: SnackBarBehavior.floating,
-      backgroundColor: isError ? Colors.redAccent : MyApp.primaryColor,
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+      backgroundColor: isError ? const Color(0xFFD32F2F) : MyApp.primaryColor,
     ));
   }
 
@@ -366,20 +397,76 @@ class _PlaceDetailsScreenState extends State<PlaceDetailsScreen> {
     }
   }
 
+  void _openInGoogleMaps() async {
+    final lat = widget.place['latitude'];
+    final lng = widget.place['longitude'];
+    if (lat == null || lng == null) {
+      _showMessage('Location coordinates not available for this place.', isError: true);
+      return;
+    }
+    final url = Uri.parse('https://www.google.com/maps/search/?api=1&query=$lat,$lng');
+    if (await canLaunchUrl(url)) {
+      await launchUrl(url, mode: LaunchMode.externalApplication);
+    } else {
+      _showMessage('Could not launch Google Maps.', isError: true);
+    }
+  }
+
   Widget _infoSection(String title, dynamic content) {
     if (content == null || content.toString().isEmpty) return const SizedBox.shrink();
-    return Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
-      Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 19, color: MyApp.primaryColor)),
-      const SizedBox(height: 8),
-      Text(content.toString(), style: TextStyle(fontSize: 15, height: 1.6, color: Colors.grey.shade800)),
-    ]);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(title, style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: MyApp.primaryColor, letterSpacing: 0.5)),
+          const SizedBox(height: 10),
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(12),
+              boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 8, offset: const Offset(0, 4))],
+            ),
+            child: Text(
+              content.toString(),
+              style: TextStyle(fontSize: 15, height: 1.6, color: Colors.grey.shade800),
+            ),
+          ),
+        ],
+      ),
+    );
   }
 
   Widget _infoTile(IconData icon, String label, dynamic value) {
     if (value == null || value.toString().isEmpty) return const SizedBox.shrink();
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 16),
-      child: Row(children: [Icon(icon, size: 20, color: MyApp.primaryColor), const SizedBox(width: 12), Expanded(child: Text(value.toString(), style: const TextStyle(fontSize: 15)))]),
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.02), blurRadius: 6, offset: const Offset(0, 2))],
+      ),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(color: MyApp.secondaryColor.withOpacity(0.2), borderRadius: BorderRadius.circular(8)),
+            child: Icon(icon, size: 20, color: MyApp.primaryColor),
+          ),
+          const SizedBox(width: 14),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(label, style: TextStyle(fontSize: 12, color: Colors.grey.shade500, fontWeight: FontWeight.w500)),
+              const SizedBox(height: 2),
+              Text(value.toString(), style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600, color: MyApp.primaryColor)),
+            ],
+          )
+        ],
+      ),
     );
   }
 
@@ -389,17 +476,38 @@ class _PlaceDetailsScreenState extends State<PlaceDetailsScreen> {
     final size = MediaQuery.of(context).size;
     final isLargeScreen = size.width > 900;
 
+    double fiveStarPercent = 0.0;
+    double fourStarPercent = 0.0;
+    double threeStarPercent = 0.0;
+    double twoStarPercent = 0.0;
+    double oneStarPercent = 0.0;
+
+    if (_reviews.isNotEmpty) {
+      int count5 = _reviews.where((r) => r['rating'] == 5).length;
+      int count4 = _reviews.where((r) => r['rating'] == 4).length;
+      int count3 = _reviews.where((r) => r['rating'] == 3).length;
+      int count2 = _reviews.where((r) => r['rating'] == 2).length;
+      int count1 = _reviews.where((r) => r['rating'] == 1).length;
+
+      fiveStarPercent = count5 / _reviews.length;
+      fourStarPercent = count4 / _reviews.length;
+      threeStarPercent = count3 / _reviews.length;
+      twoStarPercent = count2 / _reviews.length;
+      oneStarPercent = count1 / _reviews.length;
+    }
+
     return Scaffold(
       backgroundColor: MyApp.scaffoldBackground,
       appBar: AppBar(
-        title: Text(widget.place['name'] ?? 'Place Details', style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+        title: Text(widget.place['name'] ?? 'Details', style: const TextStyle(fontWeight: FontWeight.w700, color: Colors.white, fontSize: 20)),
         backgroundColor: MyApp.primaryColor,
+        elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
         actions: [
           if (isLoggedIn)
             _addingPhotos
                 ? const Padding(padding: EdgeInsets.symmetric(horizontal: 16), child: Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))))
-                : IconButton(icon: const Icon(Icons.add_a_photo_outlined), onPressed: _addMorePhotos),
+                : IconButton(icon: const Icon(Icons.add_a_photo_rounded), onPressed: _addMorePhotos),
         ],
       ),
       body: Center(
@@ -411,229 +519,363 @@ class _PlaceDetailsScreenState extends State<PlaceDetailsScreen> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (_images.isNotEmpty)
-                  Card(
-                    margin: isLargeScreen ? const EdgeInsets.only(top: 24) : EdgeInsets.zero,
-                    elevation: 4,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(isLargeScreen ? 16 : 0)),
-                    clipBehavior: Clip.antiAlias,
-                    child: SizedBox(
-                      height: isLargeScreen ? 450 : 350,
-                      child: Stack(
-                        children: [
-                          PageView.builder(
-                            controller: _pageController,
-                            itemCount: _images.length,
-                            onPageChanged: (index) => setState(() => _currentImageIndex = index),
-                            itemBuilder: (context, index) => GestureDetector(
-                              onTap: () => _showFullScreenImage(_images[index]),
-                              child: Stack(fit: StackFit.expand, children: [
-                                Image.network(_images[index], fit: BoxFit.cover, errorBuilder: (c, e, s) => Container(color: Colors.grey.shade200, child: const Icon(Icons.broken_image, size: 50))),
-                                const Positioned.fill(child: DecoratedBox(decoration: BoxDecoration(gradient: LinearGradient(colors: [Colors.transparent, Colors.black45], begin: Alignment.topCenter, end: Alignment.bottomCenter, stops: [0.7, 1.0])))),
-                              ]),
-                            ),
-                          ),
-                          if (isLoggedIn)
-                            Positioned(
-                              top: 16, right: 16,
-                              child: CircleAvatar(
-                                backgroundColor: const Color(0xB3000000),
-                                child: _deletingPhoto
-                                    ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white))
-                                    : IconButton(icon: const Icon(Icons.delete_outline_rounded, color: Colors.redAccent), onPressed: _deleteCurrentImage),
-                              ),
-                            ),
-                          if (_images.length > 1)
-                            Positioned(
-                              bottom: 16, right: 16,
-                              child: Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
-                                decoration: BoxDecoration(color: const Color(0xB3000000), borderRadius: BorderRadius.circular(30)),
-                                child: Text('${_currentImageIndex + 1} / ${_images.length}', style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.w600)),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
-                Padding(
-                  padding: EdgeInsets.all(isLargeScreen ? 0 : 16.0),
-                  child: Column(
+                  Stack(
                     children: [
-                      const SizedBox(height: 20),
-                      Card(
-                        elevation: 1,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        child: Padding(
-                          padding: const EdgeInsets.all(20.0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(widget.place['name'] ?? '', style: const TextStyle(fontSize: 28, fontWeight: FontWeight.bold, color: MyApp.primaryColor)),
-                              const SizedBox(height: 8),
-                              Row(children: [const Icon(Icons.location_on, size: 18, color: MyApp.secondaryColor), const SizedBox(width: 6), Text(widget.place['division'] ?? '', style: TextStyle(color: Colors.grey.shade700, fontSize: 15))]),
-                              const SizedBox(height: 12),
-                              Row(
-                                children: [
-                                  _buildStars(_avgRating, size: 20, showNumber: true),
-                                  const SizedBox(width: 12),
-                                  Text('($_totalReviews review${_totalReviews != 1 ? 's' : ''})', style: TextStyle(color: Colors.grey[600], fontSize: 14)),
-                                ],
+                      SizedBox(
+                        height: 380,
+                        child: PageView.builder(
+                          controller: _pageController,
+                          itemCount: _images.length,
+                          onPageChanged: (index) => setState(() => _currentImageIndex = index),
+                          itemBuilder: (context, index) => GestureDetector(
+                            onTap: () => _showFullScreenImage(_images[index]),
+                            child: Hero(
+                              tag: _images[index],
+                              child: Image.network(
+                                _images[index],
+                                fit: BoxFit.cover,
+                                errorBuilder: (_, __, ___) => Container(color: Colors.grey[300], child: const Icon(Icons.broken_image, size: 50, color: Colors.grey)),
                               ),
-                            ],
+                            ),
                           ),
                         ),
                       ),
-                      const SizedBox(height: 16),
-                      Card(
-                        elevation: 1,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                        child: Padding(
-                          padding: const EdgeInsets.all(20.0),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              _infoSection('Description', widget.place['description']),
-                              const Divider(height: 32),
-                              _infoTile(Icons.calendar_today_rounded, 'Best Time to Visit', widget.place['best_time_to_visit']),
-                              _infoTile(Icons.confirmation_num_outlined, 'Entry Fee', widget.place['entry_fee']),
-                              _infoTile(Icons.access_time_rounded, 'Opening Hours', widget.place['opening_hours']),
-                              if (widget.place['history'] != null) ...[_infoSection('History', widget.place['history'])],
-                            ],
+                      Positioned.fill(
+                        child: Container(
+                          decoration: BoxDecoration(
+                            gradient: LinearGradient(
+                              begin: Alignment.topCenter,
+                              end: Alignment.bottomCenter,
+                              colors: [Colors.black.withOpacity(0.1), Colors.transparent, Colors.black.withOpacity(0.4)],
+                            ),
                           ),
                         ),
                       ),
-                      const SizedBox(height: 20),
+                      Positioned(
+                        bottom: 20,
+                        right: 20,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                          decoration: BoxDecoration(color: Colors.black.withOpacity(0.65), borderRadius: BorderRadius.circular(20)),
+                          child: Text('${_currentImageIndex + 1} / ${_images.length}', style: const TextStyle(color: Colors.white, fontSize: 13, fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+                        ),
+                      ),
+                      if (isLoggedIn)
+                        Positioned(
+                          top: 20,
+                          right: 20,
+                          child: Container(
+                            decoration: BoxDecoration(color: Colors.black.withOpacity(0.4), shape: BoxShape.circle),
+                            child: IconButton(
+                              icon: const Icon(Icons.delete_rounded, color: Colors.white, size: 22),
+                              onPressed: _deletingPhoto ? null : _deleteCurrentImage,
+                            ),
+                          ),
+                        ),
+                    ],
+                  ),
 
-                      // ==================== REVIEW SECTION ====================
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20.0, vertical: 24.0),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
                       Card(
-                        elevation: 1,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        elevation: 0,
+                        margin: EdgeInsets.zero,
+                        color: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
                         child: Padding(
                           padding: const EdgeInsets.all(20.0),
-                          child: Column(
+                          child: Row(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              const Text('User Reviews', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: MyApp.primaryColor)),
-                              const SizedBox(height: 12),
-
-                              if (isLoggedIn) ...[
-                                if (_userReview != null && !_editingReview) ...[
-                                  Row(
-                                    children: [
-                                      const Icon(Icons.rate_review, color: MyApp.secondaryColor),
-                                      const SizedBox(width: 8),
-                                      const Text('Your review:', style: TextStyle(fontWeight: FontWeight.w500)),
-                                      const SizedBox(width: 12),
-                                      _buildStars(_userReview!['rating'].toDouble(), size: 16),
-                                      const Spacer(),
-                                      TextButton(onPressed: _startEditReview, child: const Text('Edit')),
-                                      TextButton(onPressed: _deleteReview, child: const Text('Delete', style: TextStyle(color: Colors.red))),
-                                    ],
-                                  ),
-                                  if (_userReview!['comment'] != null && _userReview!['comment'].toString().isNotEmpty)
-                                    Padding(
-                                      padding: const EdgeInsets.only(top: 4, left: 32),
-                                      child: Text(_userReview!['comment'], style: const TextStyle(fontSize: 14, color: Colors.black87)),
-                                    ),
-                                  const SizedBox(height: 16),
-                                ] else ...[
-                                  const Text('Share your experience:', style: TextStyle(fontWeight: FontWeight.w500)),
-                                  const SizedBox(height: 8),
-                                  _buildRatingSelector(),
-                                  const SizedBox(height: 8),
-                                  TextField(
-                                    controller: _commentController,
-                                    maxLines: 3,
-                                    decoration: InputDecoration(
-                                      hintText: 'Write your comment (optional)',
-                                      border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-                                      filled: true,
-                                      fillColor: Colors.grey[50],
-                                    ),
-                                  ),
-                                  const SizedBox(height: 12),
-                                  Row(
-                                    children: [
-                                      if (_editingReview) ...[
-                                        ElevatedButton(onPressed: _cancelEdit, style: ElevatedButton.styleFrom(backgroundColor: Colors.grey), child: const Text('Cancel')),
-                                        const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(widget.place['name'] ?? '', style: const TextStyle(fontSize: 26, fontWeight: FontWeight.bold, color: MyApp.primaryColor, height: 1.2)),
+                                    const SizedBox(height: 8),
+                                    Row(
+                                      children: [
+                                        _buildStars(_avgRating, showNumber: true, size: 20),
+                                        const SizedBox(width: 8),
+                                        Text('($_totalReviews reviews)', style: TextStyle(color: Colors.grey.shade500, fontSize: 14, fontWeight: FontWeight.w500)),
                                       ],
-                                      ElevatedButton(
-                                        onPressed: _submittingReview ? null : _submitReview,
-                                        child: _submittingReview
-                                            ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(strokeWidth: 2))
-                                            : Text(_editingReview ? 'Update Review' : 'Submit Review'),
-                                      ),
-                                    ],
-                                  ),
-                                  const Divider(height: 32),
-                                ],
-                              ] else ...[
-                                Container(
-                                  padding: const EdgeInsets.all(12),
-                                  decoration: BoxDecoration(color: Colors.grey[100], borderRadius: BorderRadius.circular(12)),
-                                  child: const Row(
-                                    children: [
-                                      Icon(Icons.lock_open, size: 16, color: Colors.grey),
-                                      SizedBox(width: 8),
-                                      Text('Log in to write a review.', style: TextStyle(color: Colors.grey)),
-                                    ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              if (widget.place['latitude'] != null) ...[
+                                const SizedBox(width: 12),
+                                ElevatedButton.icon(
+                                  onPressed: _openInGoogleMaps,
+                                  icon: const Icon(Icons.directions_rounded, size: 18),
+                                  label: const Text('Directions', style: TextStyle(fontWeight: FontWeight.bold)),
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: MyApp.secondaryColor,
+                                    foregroundColor: MyApp.primaryColor,
+                                    elevation: 0,
+                                    padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
                                   ),
                                 ),
-                                const Divider(height: 24),
                               ],
+                            ],
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 20),
 
-                              if (_reviewsLoading)
-                                const Center(child: Padding(padding: EdgeInsets.all(20), child: CircularProgressIndicator()))
-                              else if (_reviews.isEmpty)
-                                const Padding(
-                                  padding: EdgeInsets.all(16),
-                                  child: Center(child: Text('No reviews yet. Be the first to review!', style: TextStyle(color: Colors.grey))),
-                                )
-                              else
-                                ListView.separated(
-                                  shrinkWrap: true,
-                                  physics: const NeverScrollableScrollPhysics(),
-                                  itemCount: _reviews.length,
-                                  separatorBuilder: (_, __) => const Divider(height: 20),
-                                  itemBuilder: (context, index) {
-                                    final review = _reviews[index];
-                                    final isOwnReview = isLoggedIn && review['user_id'] == supabase.auth.currentUser!.id;
-                                    return Column(
+                      _infoTile(Icons.category_rounded, 'Category', widget.place['category']),
+                      _infoTile(Icons.location_on_rounded, 'Division', widget.place['division']),
+                      _infoTile(Icons.access_time_filled_rounded, 'Opening Hours', widget.place['opening_hours']),
+                      _infoTile(Icons.payments_rounded, 'Entry Fee', widget.place['entry_fee']),
+                      _infoTile(Icons.wb_sunny_rounded, 'Best Time to Visit', widget.place['best_time_to_visit']),
+
+                      const SizedBox(height: 8),
+                      const Divider(height: 40, thickness: 1.2),
+
+                      _infoSection('Description', widget.place['description']),
+                      _infoSection('History', widget.place['history']),
+
+                      const Divider(height: 40, thickness: 1.2),
+
+                      const Text('Guest Reviews', style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold, color: MyApp.primaryColor, letterSpacing: 0.5)),
+                      const SizedBox(height: 16),
+
+                      Container(
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                            color: Colors.white,
+                            borderRadius: BorderRadius.circular(16),
+                            boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.01), blurRadius: 10, offset: const Offset(0, 4))]
+                        ),
+                        child: Row(
+                          children: [
+                            Column(
+                              mainAxisAlignment: MainAxisAlignment.center,
+                              children: [
+                                Text(
+                                  _avgRating.toStringAsFixed(1),
+                                  style: const TextStyle(fontSize: 48, fontWeight: FontWeight.w900, color: MyApp.primaryColor),
+                                ),
+                                _buildStars(_avgRating, size: 14),
+                                const SizedBox(height: 6),
+                                Text(
+                                  '$_totalReviews reviews',
+                                  style: TextStyle(fontSize: 12, color: Colors.grey.shade500, fontWeight: FontWeight.w500),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(width: 24),
+                            Expanded(
+                              child: Column(
+                                children: [
+                                  _buildDistributionLine('5', fiveStarPercent),
+                                  _buildDistributionLine('4', fourStarPercent),
+                                  _buildDistributionLine('3', threeStarPercent),
+                                  _buildDistributionLine('2', twoStarPercent),
+                                  _buildDistributionLine('1', oneStarPercent),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+
+                      if (isLoggedIn) ...[
+                        if (_userReview != null && !_editingReview) ...[
+                          Container(
+                            width: double.infinity,
+                            decoration: BoxDecoration(
+                              color: MyApp.secondaryColor.withOpacity(0.12),
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: MyApp.secondaryColor.withOpacity(0.3)),
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.all(18.0),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+                                        decoration: BoxDecoration(color: MyApp.primaryColor, borderRadius: BorderRadius.circular(6)),
+                                        child: const Text('Your Post', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 11, color: Colors.white, letterSpacing: 0.5)),
+                                      ),
+                                      const Spacer(),
+                                      IconButton(icon: const Icon(Icons.edit_rounded, size: 20, color: MyApp.primaryColor), onPressed: _startEditReview),
+                                      IconButton(icon: const Icon(Icons.delete_outline_rounded, size: 20, color: Colors.redAccent), onPressed: _deleteReview),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 4),
+                                  _buildStars(_userReview!['rating'].toDouble(), size: 18),
+                                  if (_userReview!['comment'] != null && _userReview!['comment'].toString().isNotEmpty) ...[
+                                    const SizedBox(height: 10),
+                                    Text(_userReview!['comment'], style: TextStyle(color: Colors.grey.shade800, fontSize: 14, height: 1.5, fontStyle: FontStyle.italic)),
+                                  ],
+                                ],
+                              ),
+                            ),
+                          ),
+                        ] else ...[
+                          Container(
+                            padding: const EdgeInsets.all(20),
+                            decoration: BoxDecoration(
+                              color: Colors.white,
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(color: Colors.grey.shade100),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    const Icon(Icons.rate_review_outlined, color: MyApp.secondaryColor, size: 20),
+                                    const SizedBox(width: 8),
+                                    Text(_editingReview ? 'Modify your review' : 'Write a Review', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: MyApp.primaryColor)),
+                                  ],
+                                ),
+                                const SizedBox(height: 12),
+                                _buildRatingSelector(),
+                                const SizedBox(height: 14),
+                                TextField(
+                                  controller: _commentController,
+                                  maxLines: 3,
+                                  style: const TextStyle(fontSize: 14, color: MyApp.primaryColor),
+                                  decoration: InputDecoration(
+                                    hintText: 'Tell others about opening hours, crowd, or neat tips...',
+                                    hintStyle: TextStyle(color: Colors.grey.shade400, fontSize: 13),
+                                    filled: true,
+                                    fillColor: MyApp.scaffoldBackground.withOpacity(0.4),
+                                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide.none),
+                                    contentPadding: const EdgeInsets.all(16),
+                                  ),
+                                ),
+                                const SizedBox(height: 14),
+                                Row(
+                                  mainAxisAlignment: MainAxisAlignment.end,
+                                  children: [
+                                    if (_editingReview) ...[
+                                      TextButton(onPressed: _cancelEdit, child: const Text('Cancel', style: TextStyle(color: Colors.grey, fontWeight: FontWeight.w600))),
+                                      const SizedBox(width: 8),
+                                    ],
+                                    ElevatedButton(
+                                      onPressed: _submittingReview ? null : _submitReview,
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: MyApp.primaryColor,
+                                        foregroundColor: Colors.white,
+                                        elevation: 0,
+                                        padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 14),
+                                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                      ),
+                                      child: _submittingReview
+                                          ? const SizedBox(width: 18, height: 18, child: CircularProgressIndicator(strokeWidth: 2.5, color: Colors.white))
+                                          : Text(_editingReview ? 'Update Post' : 'Post Review', style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14)),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 24),
+                      ],
+
+                      if (_reviewsLoading)
+                        const Center(child: Padding(padding: EdgeInsets.all(32.0), child: CircularProgressIndicator()))
+                      else if (_reviews.isEmpty)
+                        Center(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 40.0),
+                            child: Column(
+                              children: [
+                                Icon(Icons.forum_outlined, size: 48, color: Colors.grey.shade300),
+                                const SizedBox(height: 12),
+                                Text('Be the first to share your experience!', style: TextStyle(color: Colors.grey.shade400, fontSize: 14, fontWeight: FontWeight.w500)),
+                              ],
+                            ),
+                          ),
+                        )
+                      else
+                        ListView.separated(
+                          shrinkWrap: true,
+                          physics: const NeverScrollableScrollPhysics(),
+                          itemCount: _reviews.length,
+                          separatorBuilder: (context, index) => const SizedBox(height: 12),
+                          itemBuilder: (context, index) {
+                            final review = _reviews[index];
+                            final String fullUserName = review['profiles']?['full_name'] ?? 'Anonymous User';
+                            final String? avatarUrl = review['profiles']?['avatar_url'];
+                            final String firstLetter = fullUserName.isNotEmpty ? fullUserName.substring(0, 1).toUpperCase() : 'A';
+
+                            return Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                  color: Colors.white,
+                                  borderRadius: BorderRadius.circular(14),
+                                  boxShadow: [BoxShadow(color: Colors.black.withOpacity(0.01), blurRadius: 6, offset: const Offset(0, 2))]
+                              ),
+                              child: Row(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  // Profile Picture Container with explicit image fallback handling
+                                  CircleAvatar(
+                                    radius: 20,
+                                    backgroundColor: MyApp.primaryColor.withOpacity(0.08),
+                                    backgroundImage: (avatarUrl != null && avatarUrl.isNotEmpty)
+                                        ? NetworkImage(avatarUrl)
+                                        : null,
+                                    child: (avatarUrl == null || avatarUrl.isEmpty)
+                                        ? Text(
+                                      firstLetter,
+                                      style: const TextStyle(color: MyApp.primaryColor, fontWeight: FontWeight.bold, fontSize: 14),
+                                    )
+                                        : null,
+                                  ),
+                                  const SizedBox(width: 14),
+                                  Expanded(
+                                    child: Column(
                                       crossAxisAlignment: CrossAxisAlignment.start,
                                       children: [
                                         Row(
+                                          mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                           children: [
                                             Expanded(
-                                              child: Row(
-                                                children: [
-                                                  Text(review['profiles']?['full_name'] ?? 'Anonymous', style: const TextStyle(fontWeight: FontWeight.bold)),
-                                                  const SizedBox(width: 8),
-                                                  _buildStars(review['rating'].toDouble(), size: 14),
-                                                ],
+                                              child: Text(
+                                                fullUserName,
+                                                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14, color: MyApp.primaryColor),
+                                                maxLines: 1,
+                                                overflow: TextOverflow.ellipsis,
                                               ),
                                             ),
-                                            if (isOwnReview)
-                                              const Icon(Icons.edit_note, size: 16, color: MyApp.secondaryColor),
+                                            Text(
+                                              _formatDate(review['created_at']),
+                                              style: TextStyle(fontSize: 11, color: Colors.grey.shade400, fontWeight: FontWeight.w500),
+                                            ),
                                           ],
                                         ),
                                         const SizedBox(height: 4),
-                                        if (review['comment'] != null && review['comment'].toString().isNotEmpty)
-                                          Text(review['comment'], style: const TextStyle(fontSize: 14)),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          _formatDate(review['created_at']),
-                                          style: TextStyle(fontSize: 11, color: Colors.grey[500]),
-                                        ),
+                                        _buildStars(review['rating'].toDouble(), size: 14),
+                                        if (review['comment'] != null && review['comment'].toString().trim().isNotEmpty) ...[
+                                          const SizedBox(height: 8),
+                                          Text(
+                                            review['comment']!,
+                                            style: TextStyle(color: Colors.grey.shade700, fontSize: 14, height: 1.45),
+                                          ),
+                                        ],
                                       ],
-                                    );
-                                  },
-                                ),
-                            ],
-                          ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            );
+                          },
                         ),
-                      ),
-                      const SizedBox(height: 40),
+                      const SizedBox(height: 32),
                     ],
                   ),
                 ),

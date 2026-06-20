@@ -17,6 +17,11 @@ class _CurrencyConverterScreenState extends State<CurrencyConverterScreen> {
   Map<String, double> _rates = {};
   bool _loading = true;
 
+  // App Palette Configuration
+  final Color _primaryColor = const Color(0xFF0B2B26);       // Dark Teal
+  final Color _secondaryColor = const Color(0xFF8EB69B);     // Soft Sage Green
+  final Color _bgBackground = const Color(0xFFF2F0FA);       // White Lilac
+
   @override
   void initState() {
     super.initState();
@@ -62,7 +67,7 @@ class _CurrencyConverterScreenState extends State<CurrencyConverterScreen> {
     final converted = inBDT  / (_rates[_toCurrency]   ?? 1.0);
     setState(() {
       _result =
-          '$amount $_fromCurrency = ${converted.toStringAsFixed(2)} $_toCurrency';
+      '$amount $_fromCurrency = ${converted.toStringAsFixed(2)} $_toCurrency';
     });
   }
 
@@ -75,67 +80,146 @@ class _CurrencyConverterScreenState extends State<CurrencyConverterScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Currency Converter')),
+      backgroundColor: _bgBackground,
+      appBar: AppBar(
+        title: const Text(
+          'Currency Converter',
+          style: TextStyle(fontWeight: FontWeight.w600, fontSize: 20),
+        ),
+        backgroundColor: _primaryColor,
+        foregroundColor: Colors.white,
+        elevation: 0,
+        centerTitle: true,
+      ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : Padding(
-              padding: const EdgeInsets.all(16),
+          ? Center(child: CircularProgressIndicator(color: _primaryColor))
+          : SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            // Core Interaction Card Container
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.circular(16),
+                boxShadow: [
+                  BoxShadow(
+                    color: _primaryColor.withOpacity(0.04),
+                    blurRadius: 14,
+                    offset: const Offset(0, 6),
+                  ),
+                ],
+              ),
+              padding: const EdgeInsets.all(20),
               child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  TextField(
-                    controller: _amountController,
-                    keyboardType:
-                        const TextInputType.numberWithOptions(decimal: true),
-                    decoration: const InputDecoration(
-                      labelText: 'Amount',
-                      border: OutlineInputBorder(),
+                  Text(
+                    'CONVERT CURRENCY',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      letterSpacing: 1.2,
+                      color: Colors.grey[600],
                     ),
                   ),
                   const SizedBox(height: 16),
+
+                  // Amount Input Textfield
+                  TextField(
+                    controller: _amountController,
+                    keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                    style: TextStyle(color: _primaryColor, fontWeight: FontWeight.w500),
+                    decoration: InputDecoration(
+                      labelText: 'Amount',
+                      labelStyle: TextStyle(color: Colors.grey[600]),
+                      prefixIcon: Icon(Icons.payments_outlined, color: _secondaryColor),
+                      enabledBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: Colors.grey[300]!),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: _primaryColor, width: 1.5),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+
+                  // Selection dropdown options row
                   Row(
                     children: [
+                      // "From" Currency Dropdown Selector
                       Expanded(
                         child: DropdownButtonFormField<String>(
                           value: _rates.containsKey(_fromCurrency)
                               ? _fromCurrency
                               : _rates.keys.first,
-                          decoration: const InputDecoration(
+                          style: TextStyle(color: _primaryColor, fontWeight: FontWeight.w600),
+                          decoration: InputDecoration(
                             labelText: 'From',
-                            border: OutlineInputBorder(),
+                            labelStyle: TextStyle(color: Colors.grey[600]),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide(color: Colors.grey[300]!),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide(color: _primaryColor),
+                            ),
                           ),
                           items: _rates.keys
-                              .map((e) =>
-                                  DropdownMenuItem(value: e, child: Text(e)))
+                              .map((e) => DropdownMenuItem(value: e, child: Text(e)))
                               .toList(),
                           onChanged: (v) =>
                               setState(() => _fromCurrency = v ?? _fromCurrency),
                         ),
                       ),
-                      const SizedBox(width: 12),
-                      // Swap button
-                      IconButton(
-                        onPressed: () => setState(() {
-                          final temp = _fromCurrency;
-                          _fromCurrency = _toCurrency;
-                          _toCurrency   = temp;
-                          _result = '';
-                        }),
-                        icon: const Icon(Icons.swap_horiz),
-                        color: Theme.of(context).primaryColor,
+
+                      // Middle Swap Interaction Button Wrapper
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 8),
+                        child: CircleAvatar(
+                          radius: 22,
+                          backgroundColor: _secondaryColor.withOpacity(0.15),
+                          child: IconButton(
+                            onPressed: () => setState(() {
+                              final temp = _fromCurrency;
+                              _fromCurrency = _toCurrency;
+                              _toCurrency   = temp;
+                              _result = '';
+                            }),
+                            icon: const Icon(Icons.swap_horiz),
+                            color: _primaryColor,
+                            iconSize: 22,
+                          ),
+                        ),
                       ),
-                      const SizedBox(width: 12),
+
+                      // "To" Currency Dropdown Selector
                       Expanded(
                         child: DropdownButtonFormField<String>(
                           value: _rates.containsKey(_toCurrency)
                               ? _toCurrency
                               : _rates.keys.first,
-                          decoration: const InputDecoration(
+                          style: TextStyle(color: _primaryColor, fontWeight: FontWeight.w600),
+                          decoration: InputDecoration(
                             labelText: 'To',
-                            border: OutlineInputBorder(),
+                            labelStyle: TextStyle(color: Colors.grey[600]),
+                            contentPadding: const EdgeInsets.symmetric(horizontal: 12, vertical: 14),
+                            enabledBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide(color: Colors.grey[300]!),
+                            ),
+                            focusedBorder: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                              borderSide: BorderSide(color: _primaryColor),
+                            ),
                           ),
                           items: _rates.keys
-                              .map((e) =>
-                                  DropdownMenuItem(value: e, child: Text(e)))
+                              .map((e) => DropdownMenuItem(value: e, child: Text(e)))
                               .toList(),
                           onChanged: (v) =>
                               setState(() => _toCurrency = v ?? _toCurrency),
@@ -144,41 +228,81 @@ class _CurrencyConverterScreenState extends State<CurrencyConverterScreen> {
                     ],
                   ),
                   const SizedBox(height: 24),
+
+                  // Execution conversion action button
                   SizedBox(
                     width: double.infinity,
                     height: 48,
                     child: ElevatedButton(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: _primaryColor,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        elevation: 0,
+                      ),
                       onPressed: _convert,
-                      child: const Text('Convert',
-                          style: TextStyle(fontSize: 16)),
+                      child: const Text(
+                        'Convert Now',
+                        style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                      ),
                     ),
                   ),
-                  const SizedBox(height: 24),
-                  if (_result.isNotEmpty)
-                    Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Theme.of(context).primaryColor.withOpacity(0.1),
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(
-                          color:
-                              Theme.of(context).primaryColor.withOpacity(0.3),
-                        ),
-                      ),
-                      child: Text(
-                        _result,
-                        textAlign: TextAlign.center,
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                          color: Theme.of(context).primaryColor,
-                        ),
-                      ),
-                    ),
                 ],
               ),
             ),
+
+            // Unified Result UI Showcase Container
+            if (_result.isNotEmpty) ...[
+              const SizedBox(height: 20),
+              Container(
+                width: double.infinity,
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  boxShadow: [
+                    BoxShadow(
+                      color: _primaryColor.withOpacity(0.04),
+                      blurRadius: 14,
+                      offset: const Offset(0, 6),
+                    ),
+                  ],
+                  border: Border.all(
+                    color: _secondaryColor.withOpacity(0.3),
+                    width: 1,
+                  ),
+                ),
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  children: [
+                    Text(
+                      'CONVERSION RESULT',
+                      style: TextStyle(
+                        fontSize: 10,
+                        fontWeight: FontWeight.bold,
+                        letterSpacing: 1.2,
+                        color: _secondaryColor,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      _result,
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: _primaryColor,
+                        letterSpacing: -0.3,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
     );
   }
 }

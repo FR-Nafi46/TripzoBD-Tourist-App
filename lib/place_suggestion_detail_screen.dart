@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'main.dart';
 
 class PlaceSuggestionDetailScreen extends StatefulWidget {
@@ -24,7 +25,6 @@ class _PlaceSuggestionDetailScreenState
   late List<String> _images;
   String? _errorMessage;
 
-  // Carousel tracking properties
   final PageController _pageController = PageController();
   int _currentImageIndex = 0;
 
@@ -185,9 +185,37 @@ class _PlaceSuggestionDetailScreenState
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg), backgroundColor: Colors.red));
   }
 
+  Widget _infoRow(IconData icon, String title, dynamic value, {bool isLast = false}) {
+    if (value == null || value.toString().isEmpty) return const SizedBox.shrink();
+    return Column(
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Icon(icon, size: 20, color: Colors.blueGrey[600]),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title, style: TextStyle(fontSize: 12, color: Colors.grey[600], fontWeight: FontWeight.bold, letterSpacing: 0.5)),
+                  const SizedBox(height: 4),
+                  Text(value.toString(), style: const TextStyle(fontSize: 15, color: Colors.black87, height: 1.4)),
+                ],
+              ),
+            ),
+          ],
+        ),
+        if (!isLast) const Padding(padding: EdgeInsets.symmetric(vertical: 12), child: Divider(height: 1)),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final s = widget.suggestion;
+    final lat = s['latitude'];
+    final lng = s['longitude'];
 
     return Scaffold(
       backgroundColor: Colors.grey[50],
@@ -201,7 +229,6 @@ class _PlaceSuggestionDetailScreenState
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // --- Modern Interactive Slideable Image Carousel ---
             if (_images.isNotEmpty)
               Container(
                 height: 250,
@@ -233,7 +260,6 @@ class _PlaceSuggestionDetailScreenState
                                     child: const Icon(Icons.broken_image, color: Colors.grey, size: 40),
                                   ),
                                 ),
-                                // Badges
                                 Positioned(
                                   top: 14,
                                   left: 14,
@@ -255,8 +281,6 @@ class _PlaceSuggestionDetailScreenState
                         },
                       ),
                     ),
-
-                    // Sliding Page Indicators (Dots Layout)
                     if (_images.length > 1)
                       Positioned(
                         bottom: 14,
@@ -311,7 +335,6 @@ class _PlaceSuggestionDetailScreenState
                 ),
               ),
 
-            // core content sheet
             Padding(
               padding: const EdgeInsets.symmetric(horizontal: 16),
               child: Column(
@@ -342,7 +365,25 @@ class _PlaceSuggestionDetailScreenState
 
                   const SizedBox(height: 24),
 
-                  // Detail Block Card
+                  if (lat != null && lng != null) ...[
+                    const Text('Location Preview', style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: Colors.black87)),
+                    const SizedBox(height: 12),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(14),
+                      child: SizedBox(
+                        height: 200,
+                        child: GoogleMap(
+                          initialCameraPosition: CameraPosition(target: LatLng(lat, lng), zoom: 15),
+                          markers: {Marker(markerId: const MarkerId('preview'), position: LatLng(lat, lng))},
+                          liteModeEnabled: true,
+                          myLocationEnabled: false,
+                          myLocationButtonEnabled: false,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                  ],
+
                   Card(
                     elevation: 0,
                     shape: RoundedRectangleBorder(
@@ -369,92 +410,49 @@ class _PlaceSuggestionDetailScreenState
                       ),
                     ),
                   ),
-                  const SizedBox(height: 140), // clear space cushion above overlay drawer
+                  const SizedBox(height: 32),
+
+                  Row(
+                    children: [
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: _processing ? null : _reject,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.white,
+                            foregroundColor: Colors.red,
+                            elevation: 0,
+                            side: const BorderSide(color: Colors.red),
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          child: const Text('Reject Submission', style: TextStyle(fontWeight: FontWeight.bold)),
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: _processing ? null : _approve,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.green[700],
+                            foregroundColor: Colors.white,
+                            elevation: 0,
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          child: _processing
+                              ? const SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2))
+                              : const Text('Approve & Go Live', style: TextStyle(fontWeight: FontWeight.bold)),
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 40),
                 ],
               ),
-            )
-          ],
-        ),
-      ),
-      bottomSheet: Container(
-        padding: EdgeInsets.only(
-          left: 16,
-          right: 16,
-          top: 16,
-          bottom: MediaQuery.of(context).padding.bottom + 16,
-        ),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          boxShadow: [
-            BoxShadow(color: Colors.black.withOpacity(0.05), blurRadius: 10, offset: const Offset(0, -4)),
-          ],
-          border: Border(top: BorderSide(color: Colors.grey[200]!)),
-        ),
-        child: _processing
-            ? const SizedBox(height: 48, child: Center(child: CircularProgressIndicator()))
-            : Row(
-          children: [
-            Expanded(
-              child: OutlinedButton.icon(
-                onPressed: _reject,
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: Colors.red[700],
-                  side: BorderSide(color: Colors.red[300]!),
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                ),
-                icon: const Icon(Icons.close, size: 18),
-                label: const Text('REJECT PROPOSAL', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 0.5)),
-              ),
-            ),
-            const SizedBox(width: 12),
-            Expanded(
-              child: ElevatedButton.icon(
-                onPressed: _approve,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green[700],
-                  foregroundColor: Colors.white,
-                  elevation: 0,
-                  padding: const EdgeInsets.symmetric(vertical: 14),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
-                ),
-                icon: const Icon(Icons.check, size: 18),
-                label: const Text('APPROVE & PUBLISH', style: TextStyle(fontWeight: FontWeight.bold, fontSize: 13, letterSpacing: 0.5)),
-              ),
             ),
           ],
         ),
       ),
-    );
-  }
-
-  Widget _infoRow(IconData icon, String label, dynamic value, {bool isLast = false}) {
-    if (value == null || value.toString().trim().isEmpty) return const SizedBox.shrink();
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            Icon(icon, size: 16, color: Colors.blueGrey[400]),
-            const SizedBox(width: 8),
-            Text(label, style: TextStyle(fontWeight: FontWeight.bold, color: Colors.blueGrey[600], fontSize: 12, letterSpacing: 0.3)),
-          ],
-        ),
-        const SizedBox(height: 6),
-        Padding(
-          padding: const EdgeInsets.only(left: 24),
-          child: Text(
-            value.toString().trim(),
-            style: const TextStyle(fontSize: 15, color: Colors.black87, height: 1.4),
-          ),
-        ),
-        if (!isLast) ...[
-          const SizedBox(height: 14),
-          Divider(color: Colors.grey[100], thickness: 1, indent: 24),
-          const SizedBox(height: 10),
-        ],
-      ],
     );
   }
 }
